@@ -4,6 +4,7 @@
 #include "stdafx.h"
 #include "TrafficMonitor.h"
 #include "NetworkInfoDlg.h"
+#include "NetworkTable.h"
 #include "afxdialogex.h"
 
 
@@ -11,25 +12,26 @@
 
 IMPLEMENT_DYNAMIC(CNetworkInfoDlg, CBaseDialog)
 
-CNetworkInfoDlg::CNetworkInfoDlg(vector<NetWorkConection>& adapters, MIB_IFROW* pIfRow, int connection_selected, CWnd* pParent /*=NULL*/)
-    : CBaseDialog(IDD_NETWORK_INFO_DIALOG, pParent), m_connections(adapters), m_pIfRow(pIfRow), m_connection_selected(connection_selected)
+CNetworkInfoDlg::CNetworkInfoDlg(const vector<NetWorkConection>& adapters, int connection_selected, CWnd* pParent /*=NULL*/)
+    : CBaseDialog(IDD_NETWORK_INFO_DIALOG, pParent), m_connections(adapters), m_connection_selected(connection_selected)
 {
     m_current_connection = connection_selected;
 }
 
 CNetworkInfoDlg::~CNetworkInfoDlg()
 {
+    std::free(m_table);
 }
 
 
 void CNetworkInfoDlg::ShowInfo()
 {
     CString temp;
-    MIB_IFROW& network_info = GetConnectIfTable(m_connection_selected);
+    const MIB_IFROW network_info = GetConnectIfTable(m_connection_selected);
     //接口名
     m_info_list.SetItemText(0, 1, network_info.wszName);
     //接口描述
-    m_info_list.SetItemText(1, 1, CCommon::StrToUnicode((const char*)network_info.bDescr).c_str());
+    m_info_list.SetItemText(1, 1, CCommon::StrToUnicode(NetworkRowDescription(network_info).c_str()).c_str());
     //连接类型
     switch (network_info.dwType)
     {
@@ -55,11 +57,13 @@ void CNetworkInfoDlg::ShowInfo()
     //适配器物理地址
     temp = _T("");
     char buff[3];
-    for (size_t i{}; i < network_info.dwPhysAddrLen; i++)
+    const DWORD address_length = network_info.dwPhysAddrLen < sizeof(network_info.bPhysAddr)
+        ? network_info.dwPhysAddrLen : static_cast<DWORD>(sizeof(network_info.bPhysAddr));
+    for (size_t i{}; i < address_length; i++)
     {
         sprintf_s(buff, "%.2x", network_info.bPhysAddr[i]);
         temp += buff;
-        if (i != network_info.dwPhysAddrLen - 1)
+        if (i != address_length - 1)
             temp += _T('-');
     }
     m_info_list.SetItemText(4, 1, temp);
@@ -104,12 +108,14 @@ void CNetworkInfoDlg::ShowInfo()
     m_info_list.SetItemText(10, 1, temp);
     //自程序启动以来已接收字节数
     unsigned __int64 in_bytes_since_start;
-    in_bytes_since_start = network_info.dwInOctets - GetConnection(m_connection_selected).in_bytes;
+    const auto initial_in = GetConnection(m_connection_selected).in_bytes;
+    in_bytes_since_start = network_info.dwInOctets >= initial_in ? network_info.dwInOctets - initial_in : 0;
     temp.Format(_T("%s (%s)"), CCommon::IntToString(in_bytes_since_start, true, true), CCommon::DataSizeToString(in_bytes_since_start));
     m_info_list.SetItemText(11, 1, temp);
     //自程序启动以来已发送字节数
     unsigned __int64 out_bytes_since_start;
-    out_bytes_since_start = network_info.dwOutOctets - GetConnection(m_connection_selected).out_bytes;
+    const auto initial_out = GetConnection(m_connection_selected).out_bytes;
+    out_bytes_since_start = network_info.dwOutOctets >= initial_out ? network_info.dwOutOctets - initial_out : 0;
     temp.Format(_T("%s (%s)"), CCommon::IntToString(out_bytes_since_start, true, true), CCommon::DataSizeToString(out_bytes_since_start));
     m_info_list.SetItemText(12, 1, temp);
 
@@ -136,16 +142,19 @@ void CNetworkInfoDlg::GetProgramElapsedTime()
     m_info_list.SetItemText(13, 1, temp);
 }
 
-MIB_IFROW& CNetworkInfoDlg::GetConnectIfTable(int connection_index)
+MIB_IFROW CNetworkInfoDlg::GetConnectIfTable(int connection_index)
 {
-    static MIB_IFROW nouse{};
+    bool resized{};
+    if (ReadNetworkTable(m_table, m_table_capacity, resized) != NO_ERROR)
+        return MIB_IFROW{};
     if (connection_index >= 0 && connection_index < static_cast<int>(m_connections.size()))
     {
-        int index = m_connections[connection_index].index;
-        if (m_pIfRow != nullptr)
-            return m_pIfRow[index];
+        const auto& description = m_connections[connection_index].description_2;
+        for (DWORD i = 0; i < m_table->dwNumEntries; ++i)
+            if (!description.empty() && NetworkRowDescription(m_table->table[i]) == description)
+                return m_table->table[i];
     }
-    return nouse;
+    return MIB_IFROW{};
 }
 
 NetWorkConection CNetworkInfoDlg::GetConnection(int connection_index)
@@ -158,48 +167,11 @@ NetWorkConection CNetworkInfoDlg::GetConnection(int connection_index)
 
 UINT CNetworkInfoDlg::GetInternetIPThreadFunc(LPVOID lpParam)
 {
-    CCommon::SetThreadLanguage(theApp.m_general_data.language.language_id);		//设置线程语言
-    CNetworkInfoDlg* p_instance = (CNetworkInfoDlg*)lpParam;
-    wstring ip_address, ip_location;
-
-    //IPV4
-    CCommon::GetInternetIp2(ip_address, ip_location, false);			//获取外网IP地址，
-    if (!IsWindow(p_instance->GetSafeHwnd()))		//如果当前对话框已经销毁，则退出线程
-        return 0;
-    if (!ip_address.empty())
-    {
-        CString info;
-        if (ip_location.empty())
-            info = ip_address.c_str();
-        else
-            info.Format(_T("%s (%s)"), ip_address.c_str(), ip_location.c_str());
-        p_instance->m_info_list.SetItemText(14, 1, info);
-    }
-    else
-    {
-        p_instance->m_info_list.SetItemText(14, 1, CCommon::LoadText(IDS_GET_FAILED));
-    }
-
-    //IPV6
-    wstring ipv6_address, ipv6_location;
-    CCommon::GetInternetIp2(ip_address, ip_location, true);			//获取外网IP地址，
-    if (!IsWindow(p_instance->GetSafeHwnd()))		//如果当前对话框已经销毁，则退出线程
-        return 0;
-    if (!ip_address.empty())
-    {
-        CString info;
-        if (ip_location.empty())
-            info = ip_address.c_str();
-        else
-            info.Format(_T("%s (%s)"), ip_address.c_str(), ip_location.c_str());
-        p_instance->m_info_list.SetItemText(15, 1, info);
-    }
-    else
-    {
-        p_instance->m_info_list.SetItemText(15, 1, CCommon::LoadText(IDS_GET_FAILED));
-    }
-
-    p_instance->m_ip_acquired = true;
+    std::unique_ptr<std::shared_ptr<IpQuery>> argument(static_cast<std::shared_ptr<IpQuery>*>(lpParam));
+    auto query = *argument;
+    CCommon::GetInternetIp2(query->ipv4, query->location4, false);
+    CCommon::GetInternetIp2(query->ipv6, query->location6, true);
+    query->ready = true;
     return 0;
 }
 
@@ -391,6 +363,18 @@ void CNetworkInfoDlg::OnTimer(UINT_PTR nIDEvent)
     if (nIDEvent == CONNECTION_DETAIL_TIMER)
     {
         GetProgramElapsedTime();
+        if (m_ip_query && m_ip_query->ready)
+        {
+            auto show_ip = [&](int item, const wstring& address, const wstring& location) {
+                const wstring value = address.empty() ? CCommon::LoadText(IDS_GET_FAILED).GetString()
+                    : address + (location.empty() ? L"" : L" (" + location + L")");
+                m_info_list.SetItemText(item, 1, value.c_str());
+            };
+            show_ip(14, m_ip_query->ipv4, m_ip_query->location4);
+            show_ip(15, m_ip_query->ipv6, m_ip_query->location6);
+            m_ip_acquired = true;
+            m_ip_query.reset();
+        }
     }
 
     CBaseDialog::OnTimer(nIDEvent);
@@ -417,11 +401,19 @@ void CNetworkInfoDlg::OnNMDblclkInfoList1(NMHDR* pNMHDR, LRESULT* pResult)
 {
     LPNMITEMACTIVATE pNMItemActivate = reinterpret_cast<LPNMITEMACTIVATE>(pNMHDR);
     // TODO: 在此添加控件通知处理程序代码
-    if (/*!theApp.m_cfg_data.m_show_internet_ip && */!m_ip_acquired && (pNMItemActivate->iItem == 14 || pNMItemActivate->iItem == 15))		//双击了IP地址一行时
+    if (!m_ip_acquired && !m_ip_query && (pNMItemActivate->iItem == 14 || pNMItemActivate->iItem == 15))
     {
         m_info_list.SetItemText(14, 1, CCommon::LoadText(IDS_ACQUIRING, _T("...")));
         m_info_list.SetItemText(15, 1, CCommon::LoadText(IDS_ACQUIRING, _T("...")));
-        m_pGetIPThread = AfxBeginThread(GetInternetIPThreadFunc, this);
+        m_ip_query = std::make_shared<IpQuery>();
+        auto argument = new std::shared_ptr<IpQuery>(m_ip_query);
+        if (AfxBeginThread(GetInternetIPThreadFunc, argument) == nullptr)
+        {
+            delete argument;
+            m_ip_query.reset();
+            m_info_list.SetItemText(14, 1, CCommon::LoadText(IDS_GET_FAILED));
+            m_info_list.SetItemText(15, 1, CCommon::LoadText(IDS_GET_FAILED));
+        }
     }
     *pResult = 0;
 }

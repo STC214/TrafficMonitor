@@ -468,7 +468,8 @@ bool CTaskBarDlg::AdjustWindowPos(bool force_adjust)
     if (force_adjust)
         ResetTaskbarPos();
 
-    ::GetWindowRect(m_hTaskbar, m_rcTaskbar);   //获得任务栏的矩形区域
+    if (!::GetWindowRect(m_hTaskbar, m_rcTaskbar) || m_rcTaskbar.IsRectEmpty())
+        return false; // Explorer/taskbar may be temporarily absent during recreation.
 
     static bool last_taskbar_on_top_or_bottom;
     CheckTaskbarOnTopOrBottom();
@@ -485,7 +486,8 @@ bool CTaskBarDlg::AdjustWindowPos(bool force_adjust)
     if (m_connot_insert_to_task_bar)
     {
         CRect rc_parent;
-        ::GetWindowRect(GetParentHwnd(), rc_parent);
+        if (!::GetWindowRect(GetParentHwnd(), rc_parent))
+            return false;
         CRect rect{ m_rect };
         rect.MoveToXY(rect.left + rc_parent.left, rect.top + rc_parent.top);
         this->MoveWindow(rect);

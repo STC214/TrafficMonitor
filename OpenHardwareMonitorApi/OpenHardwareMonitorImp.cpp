@@ -36,7 +36,7 @@ namespace OpenHardwareMonitorApi
         }
         catch (System::Exception^ e)
         {
-            error_message = ClrStringToStdWstring(e->Message);
+            error_message = ClrStringToStdWstring(e->ToString());
         }
         return pMonitor;
     }
@@ -395,7 +395,7 @@ namespace OpenHardwareMonitorApi
         }
         catch (System::Exception^ e)
         {
-            error_message = ClrStringToStdWstring(e->Message);
+            error_message = ClrStringToStdWstring(e->ToString());
         }
     }
 

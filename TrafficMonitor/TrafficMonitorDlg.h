@@ -25,6 +25,7 @@
 #include "PdhHardwareQuery/GpuUsage.h"
 #include "PdhHardwareQuery/DiskUsage.h"
 #include "HistoryTrafficFile.h"
+#include <atomic>
 
 // CTrafficMonitorDlg 对话框
 class CTrafficMonitorDlg : public CDialog
@@ -58,7 +59,8 @@ protected:
     CTaskBarDlg* m_tBarDlg{};     //任务栏窗口的指针
 
     vector<NetWorkConection> m_connections; //保存获取到的要显示到“选择网卡”菜单项中的所有网络连接
-    MIB_IFTABLE* m_pIfTable;
+    CCriticalSection m_network_critical;
+    MIB_IFTABLE* m_pIfTable{};
     DWORD m_dwSize{};	//m_pIfTable的大小
     int m_connection_selected{ 0 }; //要显示流量的连接的序号
     unsigned __int64 m_in_bytes{};        //当前已接收的字节数
@@ -131,11 +133,17 @@ protected:
 
     void DoMonitorAcquisition();    //获取一次监控信息
     static UINT MonitorThreadCallback(LPVOID dwUser);   //获取监控信息的线程函数
-    bool m_monitor_data_required{ false };          //线程中需要获取监控数据标志，当需要获取监控数据时置为true，获取到一次监控数据时置为false
-    bool m_is_thread_exit{ false }; //线程退出标志
+    std::atomic<bool> m_monitor_data_required{ false };
+    std::atomic<bool> m_is_thread_exit{ false };
+    bool m_monitor_thread_started{ false };
+    bool m_monitor_thread_stopped{ false };
+    bool m_close_pending{ false };
+    void StartMonitorThread();
     CEvent m_threadExitEvent;       //用于通知主线程工作线程已退出
 public:
-    void ExitMonitorThread();       //停止监控线程
+    bool ExitMonitorThread(DWORD timeout = 15000);
+    void OnCancel() override;
+    void OnOK() override;
 
 protected:
     CString GetMouseTipsInfo();     //获取鼠标提示信息

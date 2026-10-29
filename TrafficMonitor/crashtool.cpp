@@ -7,6 +7,7 @@
 #include "MessageDlg.h"
 #include "Common.h"
 #include "TrafficMonitor.h"
+#include "HardwareRecovery.h"
 #include <sstream>
 
 #pragma comment(lib, "Dbghelp.lib")
@@ -140,7 +141,7 @@ public:
         return stream.str();
     }
 
-	void ShowCrashInfo(EXCEPTION_POINTERS* pEP)
+	void ShowCrashInfo(EXCEPTION_POINTERS* pEP, bool show_dialog = true)
 	{
 		CString info = CCommon::LoadTextFormat(IDS_CRASH_INFO, { m_dumpFile });
 		info += _T("\r\n");
@@ -158,6 +159,8 @@ public:
         crash_log.Replace(_T("\r\n"), _T("\n"));
         crash_log.Replace(_T("\n\n"), _T("\n"));
         CCommon::WriteLog(crash_log.GetString(), theApp.m_log_path.c_str());
+        if (!show_dialog)
+            return;
         //显示崩溃对话框
         CMessageDlg dlg;
         dlg.SetWindowTitle(APP_NAME);
@@ -204,7 +207,14 @@ namespace CRASHREPORT
         ::SetErrorMode(0); //使用默认的
         CCrashReport cr;
         cr.CreateMiniDump(pEP);
-		cr.ShowCrashInfo(pEP);
+        cr.ShowCrashInfo(pEP, false);
+        if (HardwareRecovery::LaunchReplacement(theApp.m_module_path) == HardwareRecovery::LaunchResult::Launched)
+        {
+            CCommon::WriteLog(L"Unhandled exception: automatic recovery launched after crash dump.", theApp.m_log_path.c_str());
+            return EXCEPTION_EXECUTE_HANDLER;
+        }
+        // Preserve the diagnostic dialog when the retry budget is exhausted.
+        cr.ShowCrashInfo(pEP);
         return EXCEPTION_CONTINUE_SEARCH;
     }
 

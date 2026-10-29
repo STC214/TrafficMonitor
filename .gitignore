@@ -300,3 +300,14 @@ __pycache__/
 !/TrafficMonitor/language/*.ini
 *.diagsession
 enc_temp*
+
+# Local maintenance evidence, backups, credentials-free publication staging and builds
+/maintenance/baseline/
+/maintenance/baseline-project/
+/maintenance/evidence/
+/maintenance/package/
+/maintenance/*-backup/
+/maintenance/review-baseline/
+/maintenance/recovery.patch
+/maintenance/publish-staging/
+/releases/

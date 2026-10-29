@@ -4,6 +4,8 @@
 #include "AdapterCommon.h"
 #include "BaseDialog.h"
 #include "ListCtrlEx.h"
+#include <memory>
+#include <atomic>
 
 // CNetworkInfoDlg 对话框
 
@@ -12,7 +14,7 @@ class CNetworkInfoDlg : public CBaseDialog
     DECLARE_DYNAMIC(CNetworkInfoDlg)
 
 public:
-    CNetworkInfoDlg(vector<NetWorkConection>& adapters, MIB_IFROW* pIfRow, int connection_selected, CWnd* pParent = NULL);   // 标准构造函数
+    CNetworkInfoDlg(const vector<NetWorkConection>& adapters, int connection_selected, CWnd* pParent = NULL);
     virtual ~CNetworkInfoDlg();
 
     // 对话框数据
@@ -24,8 +26,9 @@ public:
 
 protected:
 
-    vector<NetWorkConection>& m_connections;
-    MIB_IFROW* m_pIfRow;
+    vector<NetWorkConection> m_connections;
+    MIB_IFTABLE* m_table{};
+    DWORD m_table_capacity{};
     int m_connection_selected;		//当前对话框显示的连接
     int m_current_connection;		//初始选择的连接
 
@@ -36,11 +39,17 @@ protected:
 
     CWinThread* m_pGetIPThread;			//获取外网IP的线程
     bool m_ip_acquired{ false };        //如果已获取外网ip地址，则为true
+    struct IpQuery
+    {
+        wstring ipv4, location4, ipv6, location6;
+        std::atomic<bool> ready{false};
+    };
+    std::shared_ptr<IpQuery> m_ip_query;
 
     //void GetIPAddress();	//获取IP地址
     void ShowInfo();
     void GetProgramElapsedTime();
-    MIB_IFROW& GetConnectIfTable(int connection_index);    //获取当前选择的网络连接的MIB_IFROW对象。connection_index为m_connections中的索引
+    MIB_IFROW GetConnectIfTable(int connection_index);
     NetWorkConection GetConnection(int connection_index); //获取当前选择的网络连接的NetWorkConection对象。connection_index为m_connections中的索引
 
     //获取外网IP的线程函数
