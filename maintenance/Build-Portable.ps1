@@ -1,4 +1,4 @@
-param([string]$ReleaseName = 'TrafficMonitor-1.86-recovery.3-win-x64-portable', [switch]$VerifyExisting)
+param([string]$ReleaseName = 'TrafficMonitor-1.87-win-x64-portable', [switch]$VerifyExisting)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 if ($ReleaseName -notmatch '^[A-Za-z0-9._-]+$') { throw 'Release name must be a file name, not a path' }
@@ -31,7 +31,7 @@ foreach ($folder in @('Microsoft.VC143.CRT', 'Microsoft.VC143.MFC')) {
 [IO.File]::WriteAllText("$app\global_cfg.ini", "[config]`r`nportable_mode = true`r`n", [Text.UTF8Encoding]::new($true))
 [IO.File]::WriteAllText("$app\config.ini", "[general]`r`ncheck_update_when_start = false`r`nmonitor_time_span = 1000`r`n[config]`r`nshow_notify_icon = true`r`nhide_main_window = false`r`nshow_task_bar_wnd = true`r`n[connection]`r`nauto_select = true`r`nselect_all = false`r`n", [Text.UTF8Encoding]::new($true))
 $readme = @'
-TrafficMonitor 1.86 - recovery.3 - Windows x64 portable
+TrafficMonitor 1.87 - Windows x64 portable
 
 Extract the entire TrafficMonitor folder to a writable local directory.
 Run TrafficMonitor.exe and approve its normal administrator request.

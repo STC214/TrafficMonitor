@@ -1,6 +1,6 @@
-# TrafficMonitor 1.86 recovery.3
+# TrafficMonitor 1.87
 
-Maintenance build of the TrafficMonitor 1.86 source tree. The application still displays its base 1.86 version; `recovery.3` identifies this fork's maintenance release.
+Numeric maintenance release. The application display version is 1.87, Windows file/product versions are 1.87.0.0, and the release tag is v1.87. New releases use numeric versions without maintenance suffixes.
 
 ## Changes
 
